@@ -7,10 +7,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# إعدادات البوت الأساسية
-TOKEN = os.getenv("BOT_TOKEN", "7718978253:AAGr_...أضف التوكن هنا...")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "7066058422"))
-CHANNEL_ID = int(os.getenv("CHANNEL_ID", "-1003936687336"))
+# المعلومات الأساسية جاهزة ومثبتة حسب طلبك
+TOKEN = "7718978253:AAGr_...أو التوكن الحقيقي الخاص بك هنا مباشرة..."
+ADMIN_ID = 7066058422
+CHANNEL_ID = -1003936687336
 
 # سعر الاشتراك وطريقة الدفع
 SUBSCRIPTION_PRICE = "25 دولار"
@@ -46,7 +46,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # إرسال تفاصيل الطالب والإيصال للآدمي
+    # إرسال تفاصيل الطالب والإيصال للآدمي حصراً
     caption = (
         f"🔔 **طلب اشتراك جديد معلق!**\n\n"
         f"👤 **اسم الطالب:** {user.full_name}\n"
@@ -125,11 +125,9 @@ async def kick_user_from_channel(context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Failed to kick user {user_id}: {e}")
 
 def main():
-    bot_token = os.getenv("BOT_TOKEN", "7718978253:AAGr_...ضع التوكن هنا...")
-    
-    application = Application.builder().token(bot_token).build()
+    application = Application.builder().token(TOKEN).build()
 
-    # المعالجات والأوامر (تم تصحيح فلتر المستخدم هنا)
+    # المعالجات والأوامر
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.PHOTO & ~filters.User(ADMIN_ID), handle_photo))
     application.add_handler(CallbackQueryHandler(button_callback))
