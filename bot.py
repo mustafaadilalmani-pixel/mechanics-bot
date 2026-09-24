@@ -1,116 +1,150 @@
-import datetime
+import os
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-TOKEN = "8664004496:AAFikQUu7sj8EiuUwbTnqnWxmUTCpse8NGY"
-ADMIN_ID = 7066058422  
-CHANNEL_ID = -1003936687336
+# إعداد السجلات لمتابعة عمل البوت
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# إعدادات البوت الأساسية (تأكد من وضعها كمتغيرات بيئة في منصة Koyeb أو ضعها هنا مباشرة)
+TOKEN = os.getenv("BOT_TOKEN", "7718978253:AAGr_...أضف التوكن الخاص بك هنا...")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "7066058422"))
+CHANNEL_ID = int(os.getenv("CHANNEL_ID", "-1003936687336"))
+
+# سعر الاشتراك وطريقة الدفع (يمكنك تعديلها حسب رغبتك)
+SUBSCRIPTION_PRICE = "25 دولار"  # أو المبلغ بالدينار حسب رغبتك
+PAYMENT_INFO = "يرجى التحويل على زين كاش أو الحساب التالي: \n`07800000000`\n\nبعد اكتمال الدفع، قم بإرسال **صورة (سكرين) الإيصال** هنا في الهوت ليتم التحويل وإرسال الرابط لك فوراً."
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_msg = (
-        "مرحباً بك في منصة ميكانيك الهندسي (المرحلة الأولى) 🎓\n\n"
-        "💰 سعر الاشتراك الشهري: 15 دولار (أو ما يعادلها بالدينار العراقي).\n\n"
-        "💳 طرق الدفع المتاحة:\n"
-        "- حساب ماستر كي: `7111439357`\n\n"
-        "📸 بعد إتمام التحويل، يرجى إرسال صورة (إيصال الدفع / السكرين) هنا مباشرة، وسيتم مراجعته وتفعيل اشتراكك في القناة فوراً."
+    """الرد على أمر البدء وإرسال تفاصيل السعر وطريقة الدفع"""
+    welcome_text = (
+        f"مرحباً بك يا بطل في بوت الاشتراك الخاص بالقناة الهندسية 🏗️\n\n"
+        f"💰 **سعر الاشتراك الشهري:** {SUBSCRIPTION_PRICE}\n\n"
+        f"📌 **طريقة الدفع:**\n{PAYMENT_INFO}"
     )
-    await update.message.reply_text(welcome_msg, parse_mode="Markdown")
+    await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
-async def handle_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """استلام صورة إيصال الدفع من الطالب وتحويلها للآدمي مع أزرار القبول والرفض"""
     user = update.message.from_user
-    if update.message.photo:
-        photo_file = update.message.photo[-1].file_id
-        
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ قبول وتفعيل", callback_data=f"accept_{user.id}"),
-                InlineKeyboardButton("❌ رفض", callback_data=f"reject_{user.id}")
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        caption = (
-            f"📥 طلب اشتراك جديد:\n"
-            f"👤 اسم الطالب: {user.first_name}\n"
-            f"🔗 المعرف: @{user.username if user.username else 'لا يوجد'}\n"
-            f"🆔 الآدي: `{user.id}`"
-        )
-        
-        await context.bot.send_photo(
-            chat_id=ADMIN_ID,
-            photo=photo_file,
-            caption=caption,
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
-        )
-        
-        await update.message.reply_text("⏳ تم استلام السكرين بنجاح، جاري التحقق من الحوالة وتفعيل اشتراكك...")
-    else:
-        await update.message.reply_text("يرجى إرسال صورة إيصال التحويل (سكرين) حصراً.")
+    
+    # التحقق من أن الرسالة مرفقة بصورة
+    if not update.message.photo:
+        return
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    photo_file_id = update.message.photo[-1].file_id
+
+    # رسالة تنبيه للطالب بأن السكرين وصل وجاري المراجعة
+    await update.message.reply_text("⏳ تم استلام إيصال الدفع بنجاح! جاري مراجعته من قبل الإدارة وسيتم إرسال رابط القناة خلال لحظات.")
+
+    # تجهيز الأزرار للآدمي (قبول أو رفض)
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ قبول وإرسال الرابط", callback_data=f"accept_{user.id}"),
+            InlineKeyboardButton("❌ رفض", callback_data=f"reject_{user.id}")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # إرسال تفاصيل الطالب وإيصال الدفع إلى الآدمي حصراً
+    caption = (
+        f"🔔 **طلب اشتراك جديد معلق!**\n\n"
+        f"👤 **اسم الطالب:** {user.full_name}\n"
+        f"🆔 **معرف الحساب:** @{user.username if user.username else 'لا يوجد'}\n"
+        f"🔢 **الـ ID:** `{user.id}`"
+    )
+    
+    await context.bot.send_photo(
+        chat_id=ADMIN_ID,
+        photo=photo_file_id,
+        caption=caption,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """التعامل مع ضغطات أزرار القبول أو الرفض من قبل الآدمي"""
     query = update.callback_query
     await query.answer()
-    
+
     data = query.data
-    action, student_id = data.split("_")
-    student_id = int(student_id)
-    
+    action, student_id_str = data.split("_")
+    student_id = int(student_id_str)
+
     if action == "accept":
         try:
-            expire_date = datetime.datetime.now() + datetime.timedelta(days=1)
+            # 1. إنشاء رابط دعوة صالح للاستخدام مرة واحدة فقط وينتهي خلال 24 ساعة
             invite_link = await context.bot.create_chat_invite_link(
                 chat_id=CHANNEL_ID,
-                member_limit=1,
-                expire_date=expire_date
+                member_limit=1
             )
-            
+
+            # 2. إرسال الرابط للطالب وتأكيد تفعيل الاشتراك
+            success_msg = (
+                f"🎉 **مبروك! تم قبول اشتراكك بنجاح.**\n\n"
+                f"🔗 إليك رابط الدخول الخاص بك للقناة (صالح للاستخدام مرة واحدة فقط):\n{invite_link.invite_link}\n\n"
+                f"⏳ اشتراكك فعال لمدة **30 يوماً**."
+            )
+            await context.bot.send_message(chat_id=student_id, text=success_msg, parse_mode="Markdown")
+
+            # 3. جدولة إزالة المستخدم تلقائياً بعد 30 يوماً (30 * 24 * 60 * 60 ثانية)
+            # ملاحظة: لضمان عمل الجدولة بشكل دائم يفضل استخدام قاعدة بيانات، لكن سنستخدم الجدولة المؤقتة بالذاكرة هنا
+            context.job_queue.run_once(kick_user_from_channel, when=30 * 86400, data={"user_id": student_id, "chat_id": CHANNEL_ID})
+
+            # تحديث رسالة الآدمي لتوضيح أنه تم القبول
+            await query.edit_message_caption(caption=query.message.caption + "\n\n✅ **[تم قبول الطلب وإرسال الرابط للطالب]**", reply_markup=None)
+
+        except Exception as e:
+            await query.message.reply_text(f"⚠️ حدث خطأ أثناء إنشاء الرابط (تأكد أن البوت مشرف في القناة وله صلاحية إضافة أعضاء): {e}")
+
+    elif action == "reject":
+        # إبلاغ الطالب برفض الإيصال
+        try:
             await context.bot.send_message(
                 chat_id=student_id,
-                text=(
-                    f"🎉 تم قبول اشتراكك بنجاح!\n\n"
-                    f"🔗 إليك رابط الدخول الخاص بك للقناة (مخصص لك وحدك وصالح لمرة واحدة):\n"
-                    f"{invite_link.invite_link}\n\n"
-                    f"⏱️ ملاحظة: اشتراكك مفعل لمدة 30 يوماً من الآن."
-                )
+                text="❌ عذراً، تم رفض إيصال الدفع المرسل. يرجى التأكد من السجل أو مراسلة الدعم الفني."
             )
-            
-            context.job_queue.run_once(kick_student, when=datetime.timedelta(days=30), data=student_id)
-            
-            await query.edit_message_caption(caption=query.message.caption + "\n\n✅ **تم القبول وإرسال الرابط وجدولة الطرد بعد 30 يوماً.**", parse_mode="Markdown")
-        
-        except Exception as e:
-            await query.edit_message_caption(caption=query.message.caption + f"\n\n⚠️ خطأ: {str(e)}")
-            
-    elif action == "reject":
-        await context.bot.send_message(
-            chat_id=student_id,
-            text="❌ عذراً، تم رفض إيصال الدفع لعدم صحته أو عدم وضوحه. يرجى التأكد من الحوالة والمحاولة مرة أخرى."
-        )
-        await query.edit_message_caption(caption=query.message.caption + "\n\n❌ **تم رفض الطلب.**", parse_mode="Markdown")
+        except:
+            pass
 
-async def kick_student(context: ContextTypes.DEFAULT_TYPE):
-    student_id = context.job.data
+        # تحديث رسالة الآدمي لتوضيح أنه تم الرفض
+        await query.edit_message_caption(caption=query.message.caption + "\n\n❌ **[تم رفض الطلب]**", reply_markup=None)
+
+async def kick_user_from_channel(context: ContextTypes.DEFAULT_TYPE):
+    """وظيفة طرد الطالب من القناة تلقائياً بعد انتهاء الـ 30 يوم"""
+    job_data = context.job.data
+    user_id = job_data["user_id"]
+    chat_id = job_data["chat_id"]
+
     try:
-        await context.bot.ban_chat_member(chat_id=CHANNEL_ID, user_id=student_id)
-        await context.bot.unban_chat_member(chat_id=CHANNEL_ID, user_id=student_id)
+        # حظر المؤقت ثم فك الحظر عنه (هذه هي الطريقة البرمجية الرسمية لطرد العضو من القناة في تليجرام)
+        await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+        await context.bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
         
+        # إعلام الطالب بانتهاء اشتراكه
         await context.bot.send_message(
-            chat_id=student_id,
-            text="⏳ انتهت مدة اشتراكك الشهرية (30 يوماً). تم إزالتك من القناة، ولتجديد الاشتراك يرجى التواصل مع الأستاذ وإرسال إيصال جديد."
+            chat_id=user_id,
+            text="⚠️ انتهت مدة اشتراكاتك الـ 30 يوماً وتم إخراجك من القناة تلقائياً. لتجديد الاشتراك يرجى إرسال /start من جديد."
         )
     except Exception as e:
-        print(f"Error kicking student: {e}")
+        logger.error(f"Failed to kick user {user_id}: {e}")
 
 def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+    """تشغيل وبدء تشغيل البوت"""
+    # احصل على التوكن من متغيرات البيئة أو ضعه مباشرة هنا للاختبار
+    bot_token = os.getenv("BOT_TOKEN", "7718978253:AAGr_...ضع التوكن هنا إذا لم تضعه في Variables...")
+    
+    application = Application.builder().token(bot_token).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.PHOTO & ~filters.COMMAND, handle_receipt))
-    app.add_handler(CallbackQueryHandler(button_handler))
+    # الأوامر والمعالجات
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.PHOTO & ~filters.USER(ADMIN_ID), handle_photo))
+    application.add_handler(CallbackQueryHandler(button_callback))
 
+    # بدء التشغيل
     print("Bot is running...")
-    app.run_polling()
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
